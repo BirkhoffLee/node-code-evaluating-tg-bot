@@ -1,5 +1,7 @@
-spawn = require('child_process').spawn
-Bot   = require 'node-telegram-bot'
+spawn   = require('child_process').spawn
+Bot     = require 'node-telegram-bot'
+timeout = 120000 # in ms
+token   = 'YOUR_TOKEN_HERE'
 
 if !Date.now
     Date.now = -> return new Date().getTime()
@@ -14,7 +16,7 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
     console.log "Docker installation check OK & node image has been downloaded and ready."
 
     bot = new Bot(
-        token: 'YOUR_TOKEN_HERE'
+        token: token
     ).on('message', (message) ->
         console.log "@#{message.from.username}: #{message.text}"
 
@@ -27,7 +29,7 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
         if message.text.indexOf("/start") == 0
             bot.sendMessage
                 chat_id: message.chat.id,
-                text: "Hello #{message.from.first_name}!\nYou can tell me what node.js code I need to evaluate, and I will give you the result.\nYou can call installModule(\"module1\", \"module2\"(, ...), callback) to install npm modules and require them in the script.\nAfter 120 seconds of execution, the script will timeout and be killed."
+                text: "Hello #{message.from.first_name}!\nYou can tell me what node.js code I need to evaluate, and I will give you the result.\nYou can call installModule(\"module1\", \"module2\"(, ...), callback) to install npm modules and require them in the script.\nAfter " + timeout/1000 + " seconds of execution, the script will timeout and be killed."
             return
 
         code = 'function installModule() {\
@@ -49,32 +51,37 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
                     })\
                 }' + message.text
 
-        containerName = Math.floor(Date.now() / 1000).toString()
+        containerName     = Date.now().toString()
         executionFinished = false
+        result            = ""
+
+        bot.sendMessage
+            chat_id: message.chat.id,
+            text: "** Script execution started, which its ID is #{containerName}, execution timeout is " + timeout/1000 + " seconds. The result will be sent to you after execution. (up to " + timeout/1000 + " seconds) **"
 
         setTimeout ->
             if !executionFinished
                 spawn('docker', ['rm', '-f', containerName]).on 'close', (code) ->
                     bot.sendMessage
                         chat_id: message.chat.id,
-                        text: "** Script execution timed out, killing the script. (120 seconds) **"
-        , 120000
+                        text: "** Script with ID #{containerName} execution timed out, killing the script. (" + timeout/1000 + " seconds) **"
+        , timeout
 
         container = spawn 'docker', ['run', '--name', containerName, '--rm', 'node', 'bash', '-c', 'cd /home; echo ' + new Buffer(code).toString('base64') + ' | base64 --decode > ./run.js; node ./run.js']
 
         container.stdout.on 'data', (data) ->
-            bot.sendMessage
-                chat_id: message.chat.id,
-                text: data.toString()
+            result += data.toString()
 
         container.stderr.on 'data', (data) ->
-            bot.sendMessage
-                chat_id: message.chat.id,
-                text: data.toString()
+            result += data.toString()
 
         container.on 'close', (code) ->
             executionFinished = true
+
+            if result != ""
+                result += "\n"
+
             bot.sendMessage
                 chat_id: message.chat.id,
-                text: "** Script execution ended with code #{code} **"
+                text: "#{result}** Script with ID #{containerName} execution ended with code #{code} **"
     ).start()
