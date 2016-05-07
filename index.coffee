@@ -57,7 +57,7 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
 
         bot.sendMessage
             chat_id: message.chat.id,
-            text: "** Script execution started, which its ID is #{containerName}, execution timeout is " + timeout/1000 + " seconds. The result will be sent to you after execution. (up to " + timeout/1000 + " seconds) **"
+            text: "** Script with ID #{containerName} started executing, the execution timeout is " + timeout/1000 + " seconds. The result will be sent to you after execution (up to " + timeout/1000 + " seconds). Notice that everything will be deleted permanently after execution. **"
 
         setTimeout ->
             if !executionFinished
