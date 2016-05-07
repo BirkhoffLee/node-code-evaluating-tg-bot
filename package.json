@@ -1,0 +1,25 @@
+{
+  "name": "node-code-evaluating-bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot for executing node.js code and giving the results to users.",
+  "main": "index.coffee",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BirkhoffLee/node-code-evaluating-tg-bot.git"
+  },
+  "author": "Birkhoff Lee <birkhoff.lee.cn@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/BirkhoffLee/node-code-evaluating-tg-bot/issues"
+  },
+  "homepage": "https://github.com/BirkhoffLee/node-code-evaluating-tg-bot#readme",
+  "dependencies": {
+    "node-telegram-bot": "^0.1.9"
+  }
+}
