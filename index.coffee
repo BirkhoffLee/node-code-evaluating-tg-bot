@@ -1,7 +1,8 @@
-spawn   = require('child_process').spawn
-Bot     = require 'node-telegram-bot'
-timeout = 120000 # in ms
-token   = 'YOUR_TOKEN_HERE'
+spawn    = require('child_process').spawn
+Bot      = require 'telegram-bot-api'
+timeout  = 120000 # in ms
+token    = 'YOUR_TOKEN_HERE'
+username = null;
 
 strings =
     check_docker: "Checking Docker installation & download latest node image."
@@ -11,6 +12,8 @@ strings =
     end: "** Script execution ended with code {code} **"
     startEvaluate: "** Script started executing, the execution timeout is " + timeout/1000 + " seconds. The result will be sent to you after execution (up to " + timeout/1000 + " seconds). Notice that everything will be deleted permanently after execution. **"
     timeout: "** Script execution timed out, killing the script. (" + timeout/1000 + " seconds) **"
+    getme_failed: "Unable to get the bot's information. Aborting."
+    sendmessage_failed: "Unable to send message. Aborting."
 
 installModuleCode = 'function installModule() {\
                         var modules = "";\
@@ -32,6 +35,11 @@ installModuleCode = 'function installModule() {\
                         return 0;
                     }'
 
+sendMessageErrorHandler = (err) ->
+    console.log err
+    console.log strings.sendmessage_failed
+    process.exit -1
+
 if !Date.now
     Date.now = -> return new Date().getTime()
 
@@ -44,32 +52,44 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
 
     console.log strings.docker_check_ok
 
-    bot = new Bot(
+    bot = new Bot
         token: token
-    ).on('message', (message) ->
-        console.log "@#{message.from.username}: #{message.text}"
+        updates:
+            enabled: true
 
+    bot.getMe()
+        .then (data) ->
+            username = data.username
+        .catch (err) ->
+            console.log strings.getme_failed
+            process.exit -1
+
+    bot.on 'message', (message) ->
         if !message.text?
             return
 
-        if message.text.indexOf("/start") == 0 or message.text.indexOf("/help") == 0
-            bot.sendMessage
-                chat_id: message.chat.id
-                reply_to_message_id: message.message_id
-                text: strings.help.replace /{name}/gi, message.from.first_name
-            return
+        console.log "@#{message.from.username}: #{message.text}"
 
-        if message.text.indexOf("/evaluate") == -1
-            return
+        firstPiece = message.text.split(" ")[0]
+        quiet      = null
 
-        if message.text.indexOf("/evaluatequiet") == 0
-            message.text = message.text.slice 15
-            quiet = true
-        else
-            message.text = message.text.slice 10
-            quiet = false
+        switch firstPiece.replace(new RegExp("@#{username}", "i"), "").slice 1
+            when "start", "help"
+                bot.sendMessage
+                    chat_id: message.chat.id
+                    reply_to_message_id: message.message_id
+                    text: strings.help.replace /{name}/gi, message.from.first_name
+                .catch sendMessageErrorHandler
+                return
+            when "evaluate"
+                quiet = false
+            when "evaluatequiet"
+                quiet = true
+            else
+                return
 
-        code = installModuleCode + message.text
+        message.text = message.text.slice firstPiece.length + 1
+        code         = installModuleCode + message.text
 
         containerName     = Date.now().toString()
         executionFinished = false
@@ -80,6 +100,7 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
                 chat_id: message.chat.id
                 reply_to_message_id: message.message_id
                 text: strings.startEvaluate
+            .catch sendMessageErrorHandler
 
         setTimeout ->
             if !executionFinished
@@ -88,6 +109,7 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
                         chat_id: message.chat.id
                         reply_to_message_id: message.message_id
                         text: strings.timeout
+                    .catch sendMessageErrorHandler
         , timeout
 
         container = spawn 'docker', ['run', '--name', containerName, '--rm', 'node', 'bash', '-c', 'cd /home; echo ' + new Buffer(code).toString('base64') + ' | base64 --decode > ./run.js; node ./run.js']
@@ -111,21 +133,22 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
                 bot.sendMessage
                     chat_id: message.chat.id
                     reply_to_message_id: message.message_id
-                    disable_web_page_preview: true
+                    disable_web_page_preview: "true"
                     text: result.slice 0, 4096
-                , callback
+                .then callback
+                .catch sendMessageErrorHandler
 
             sliceLoop = (message, result) ->
                 if result.length > 4096
-                    sendSlicedResult message, result, ->
+                    sendSlicedResult message, result, (data) ->
                         result = result.slice 4096
                         sliceLoop message, result
                 else
                     bot.sendMessage
                         chat_id: message.chat.id
                         reply_to_message_id: message.message_id
-                        disable_web_page_preview: true
+                        disable_web_page_preview: "true"
                         text: result
+                    .catch sendMessageErrorHandler
 
             sliceLoop message, result
-    ).start()
