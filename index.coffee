@@ -7,8 +7,7 @@ strings =
     check_docker: "Checking Docker installation & download latest node image."
     docker_check_not_ok: "Please check your Docker installation. Make sure 'docker run --rm node' can be executed normally."
     docker_check_ok: "Docker installation check OK & node image has been downloaded and ready."
-    err_code_type: "Sorry {name}! You have to give me the node.js code(in string) so I can evaluate that for you!"
-    help: "Hello {name}!\nYou can tell me what node.js code I need to evaluate, and I will give you the result.\nIn groups, use /evaluate command to give me the code. In private messages, just send me the code and I will evaluate that for you.\nYou can call installModule(\"module1\", \"module2\"(, ...), callback) to install NPM modules and require them in the script.\nAfter " + timeout/1000 + " seconds of execution, the script will timeout and be killed."
+    help: "Hello {name}!\nYou can tell me what node.js code I need to evaluate, and I will give you the result.\n\nUse /evaluate command to give me the code. Use /evaluatequiet to evaluate the code without any debug messages. (Timeout notice will still be sent. Also, if script has no output, the script return value will still be sent.)\n\nYou can call `installModule(\"module1\", \"module2\"(, ...), callback);` to install NPM modules and require them in the script.\n\nAfter " + timeout/1000 + " seconds of execution, the script will timeout and be killed."
     end: "** Script execution ended with code {code} **"
     startEvaluate: "** Script started executing, the execution timeout is " + timeout/1000 + " seconds. The result will be sent to you after execution (up to " + timeout/1000 + " seconds). Notice that everything will be deleted permanently after execution. **"
     timeout: "** Script execution timed out, killing the script. (" + timeout/1000 + " seconds) **"
@@ -51,13 +50,6 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
         console.log "@#{message.from.username}: #{message.text}"
 
         if !message.text?
-            if message.chat.type == "group"
-                return
-
-            bot.sendMessage
-                chat_id: message.chat.id
-                reply_to_message_id: message.message_id
-                text: strings.err_code_type.replace /{name}/gi, message.from.first_name
             return
 
         if message.text.indexOf("/start") == 0 or message.text.indexOf("/help") == 0
@@ -67,11 +59,15 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
                 text: strings.help.replace /{name}/gi, message.from.first_name
             return
 
-        if message.chat.type == "group"
-            if message.text.indexOf("/evaluate") == -1
-                return
-            else
-                message.text = message.text.slice 10
+        if message.text.indexOf("/evaluate") == -1
+            return
+
+        if message.text.indexOf("/evaluatequiet") == 0
+            message.text = message.text.slice 15
+            quiet = true
+        else
+            message.text = message.text.slice 10
+            quiet = false
 
         code = installModuleCode + message.text
 
@@ -79,10 +75,11 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
         executionFinished = false
         result            = ""
 
-        bot.sendMessage
-            chat_id: message.chat.id
-            reply_to_message_id: message.message_id
-            text: strings.startEvaluate
+        if !quiet
+            bot.sendMessage
+                chat_id: message.chat.id
+                reply_to_message_id: message.message_id
+                text: strings.startEvaluate
 
         setTimeout ->
             if !executionFinished
@@ -107,7 +104,8 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
             if result != ""
                 result += "\n"
 
-            result += strings.end.replace /{code}/gi, code
+            if !quiet or result == ""
+                result += strings.end.replace /{code}/gi, code
 
             sendSlicedResult = (message, result, callback) ->
                 bot.sendMessage
