@@ -14,6 +14,7 @@ strings =
     timeout: "** Script execution timed out, killing the script. (" + timeout/1000 + " seconds) **"
     getme_failed: "Unable to get the bot's information. Aborting."
     sendmessage_failed: "Unable to send message. Aborting."
+    no_code_given: "Sorry, you have to give me the node.js code."
 
 installModuleCode = 'function installModule() {\
                         var modules = "";\
@@ -88,7 +89,16 @@ spawn('docker', ['run', '--rm', 'node']).on 'close', (code) ->
             else
                 return
 
-        message.text = message.text.slice firstPiece.length + 1
+        message.text = message.text.slice(firstPiece.length + 1).trim()
+
+        if message.text == ""
+            bot.sendMessage
+                chat_id: message.chat.id
+                reply_to_message_id: message.message_id
+                text: strings.no_code_given
+            .catch sendMessageErrorHandler
+            return
+
         code         = installModuleCode + message.text
 
         containerName     = Date.now().toString()
